@@ -426,14 +426,16 @@ acr122_usb_open(const nfc_context *context, const nfc_connstring connstring)
         // we failed to use the specified device
         goto free_mem;
       }
-
+/* 
       res = usb_set_altinterface(data.pudh, 0);
       if (res < 0) {
         log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_ERROR, "Unable to set alternate setting on USB interface (%s)", _usb_strerror(res));
-        usb_close(data.pudh);
+        //usb_close(data.pudh);
+	res=0;
         // we failed to use the specified device
         goto free_mem;
       }
+*/
 
       // Allocate memory for the device info and specification, fill it and return the info
       pnd = nfc_device_new(context, connstring);
@@ -605,6 +607,8 @@ read:
   uint8_t attempted_response = RDR_to_PC_DataBlock;
   size_t len;
 
+int error, status;
+
   if (res == NFC_ETIMEOUT) {
     if (DRIVER_DATA(pnd)->abort_flag) {
       DRIVER_DATA(pnd)->abort_flag = false;
@@ -615,7 +619,7 @@ read:
       goto read;
     }
   }
-  if (res < 12) {
+  if (res < 10) {
     log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_ERROR, "%s", "Invalid RDR_to_PC_DataBlock frame");
     // try to interrupt current device state
     acr122_usb_ack(pnd);
@@ -630,6 +634,20 @@ read:
   offset++;
 
   len = abtRxBuf[offset++];
+
+status = abtRxBuf[7];
+  error = abtRxBuf[8];
+ if (len == 0 && error == 0xFE) { // ICC_MUTE; XXX check for more errors
+  // Do not check status; my ACR122U seemingly has status=0 in this case,
+  // even though the spec says it should have had bmCommandStatus=1
+  // and bmICCStatus=1.
+ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "%s", "Command timed out");
+  pnd->last_error = NFC_ETIMEOUT;
+  return pnd->last_error;
+  }
+
+
+
   if (!((len > 1) && (abtRxBuf[10] == 0xd5))) { // In case we didn't get an immediate answer:
     if (len != 2) {
       log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_ERROR, "%s", "Wrong reply");
@@ -658,7 +676,7 @@ read:
         goto read; // FIXME May cause some trouble on Touchatag, right ?
       }
     }
-    if (res < 12) {
+    if (res < 10) {
       // try to interrupt current device state
       acr122_usb_ack(pnd);
       pnd->last_error = NFC_EIO;
