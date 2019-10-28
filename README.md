@@ -1,3 +1,9 @@
+COMPATIBLE WITH LATEST VERSION OF ACR122U-A9
+
+
+
+
+
 ```
 *-
 * Free/Libre Near Field Communication (NFC) library
